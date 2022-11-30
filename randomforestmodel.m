@@ -19,10 +19,10 @@ T = sortrows(T,1);
 
  %%
 close all
-wnames = ["haar" "db2" "db3" "db4" "db5" "db6" "sym1" "sym2" "sym3" "sym4" "coif1" "coif2" "coif3" "coif4" "coif5"]
+wnames = ["haar" "db2" "db3" "db4" "db5" "db6" "sym1" "sym2" "sym3" "sym4" "coif1" "coif2" "coif3" "coif4"]
 for i = 1:numel(wnames)
     [psi,xval] = wavefun(wnames(i));
-    psi = resample(psi,48, numel(psi));
+    psi = resample(psi,48,numel(psi));
     arr = 1:48;
     %disp(trapz(arr,psi));
     psi = psi/trapz(arr,psi);
@@ -33,7 +33,9 @@ for i = 1:numel(wnames)
     %plot(T.Var4(2000:2720));
     %figure
     r = xcorr(T.Var4(2000:2720),psi);
-    %plot(r);
+    figure
+    plot(r);
+    title(wnames(i))
     disp(mean(r.^2));
     disp('max')
     disp(max(r));
@@ -73,23 +75,24 @@ lev = 6;
 %index = find((day(time)==1)&(hour(time)==0));
 
 
+
 %training
 
 close all
 Coef = [];
-Xvar = [T.Var7] %T.Var6 T.Var9] %T.Var9 T.Var6];% T.Humidity];
-Yvar = [T.Var7];
-trainingcut = 70000 %floor(size(Yvar,1)*3/4);
+Xvar = [T.Var4 T.Var7] %T.Var7] %T.Var6]; %T.Var6] %T.Var6 T.Var11] %T.Var6 T.Var9] %T.Var9 T.Var6];% T.Humidity];
+Yvar = [T.Var6];
+trainingcut = 50000 %floor(size(Yvar,1)*3/4);
 trainingX = gpuArray(Xvar(1:trainingcut,:));
 
 testingX = gpuArray(Xvar(trainingcut:end,:));
 trainingY = gpuArray(Yvar(1:trainingcut));
 testingY = gpuArray(Yvar(trainingcut:end,:));
-jump = 700
+jump = 168
 
 
-interval = 4000;
-pint = 720;
+interval = 48*364;
+pint = 168;
 %numtraininc = floor(numel(trainingX)/timeinc);
 
 %testing
@@ -111,15 +114,19 @@ for  i = interval:jump:trainingcut
     %C3 = X((i -1)*(timeinc)+1:i*timeinc);
     %split into wavelet group
     Coef = [];
-    for j = 1:size(trainingX,2)
-        [C3,L3] = wavedec(trainingX(i-interval+1:i,j),lev,wname);
-        [cd1,cd2,cd3,cd4,cd5] = detcoef(C3,L3,[1 2 3 4 5]);
-        C3 = gather(C3 );
-        a1 = appcoef(C3,L3,wname,1);
-        Coef = [cd3];
-        normalx = trainingX(i-interval+1:i,j);
-        
-    end
+    % temp coef
+    [C3,L3] = wavedec(trainingX(i-interval+1:i,1),lev,wname);
+    [cd1,cd2,cd3,cd4,cd5] = detcoef(C3,L3,[1 2 3 4 5]);
+    C3 = gather(C3);
+    a5 = appcoef(C3,L3,wname,5);
+    test = randn(size(cd3));
+    Coef = [a5];
+    
+    [C3,L3] = wavedec(trainingX(i-interval+1:i,2),lev,wname);
+    [cd4,cd5] = detcoef(C3,L3,[4,5]);
+    %Coef = [Coef;cd5(300:end);cd4(700:end)];
+    normalx = trainingX(i-interval+1:i,2);
+    
     coefarr= [coefarr;Coef'];
     normalxarr = [normalxarr; normalx'];
     meanY = [mean(Yvar(i:i+pint));meanY];
@@ -134,8 +141,8 @@ end
 coefarr = gather(coefarr);
 meanY = gather(meanY);
 normalxarr= gather(normalxarr);
-Mdl = TreeBagger(1000,coefarr,meanY, 'Method', 'regression','OOBPrediction','on','NumPredictorsToSample',50,'MinLeafSize',5);
-Mdlc = TreeBagger(1000,normalxarr,meanY, 'Method', 'regression','OOBPrediction','on','NumPredictorsToSample',50,'MinLeafSize',5);
+Mdl = TreeBagger(100,coefarr,meanY, 'Method', 'regression','OOBPrediction','on','NumPredictorsToSample',50,'MinLeafSize',2);
+Mdlc = TreeBagger(10,normalxarr,meanY, 'Method', 'regression','OOBPrediction','on','NumPredictorsToSample',50,'MinLeafSize',3);
 figure
 plot(oobError(Mdl))
 xlabel('Number of Trees')
@@ -152,19 +159,24 @@ meanTest = gpuArray([]);%gpuArray(zeros(10000,1));
 normalxtarr = [];
 for i = interval:jump:numel(testingY)- pint
     Coef = [];
-    for j = 1:size(testingX,2)
-        [C3,L3] = wavedec(trainingX(i-interval+1:i,j),lev,wname);
+
+        [C3,L3] = wavedec(testingX(i-interval+1:i,1),lev,wname);
         [cd1,cd2,cd3,cd4,cd5] = detcoef(C3,L3,[1 2 3 4 5]);
-        C3 = gather(C3 );
-        a1 = appcoef(C3,L3,wname,1);
-        Coef = [cd3];
-        normalxt = testingX(i-interval+1:i,j);
+        C3 = gather(C3);
+        a5 = appcoef(C3,L3,wname,5);
+        Coef = [a5];
         
-    end
+        normalxt = testingX(i-interval+1:i,2);
+        
+        [C3,L3] = wavedec(testingX(i-interval+1:i,2),lev,wname);
+    [cd4,cd5] = detcoef(C3,L3,[4, 5]);
+    %Coef = [Coef;cd5(300:end);cd4(700:end)];
+        
+        
     %[cd1,cd2,cd3,cd4] = detcoef(C3,L3,[1 2 3 4]);
        normalxtarr = [normalxtarr; normalxt'];
-    coefarrtest= [coefarrtest;Coef'];
-    meanTest= [mean(testingY(i:i+pint));meanTest];
+        coefarrtest= [coefarrtest;Coef'];
+        meanTest= [mean(testingY(i:i+pint));meanTest];
 end
 coefarrtest = gather(coefarrtest);
 meanTest= gather(meanTest);
@@ -178,4 +190,4 @@ figure
 hold on
 plot(predarr);
 plot(meanTest);
-legend('predarr', 'meantest')
+legend('Prediction','Truth')
