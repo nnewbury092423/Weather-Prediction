@@ -20,7 +20,7 @@ lev = 5;
 close all
 Xvar = [T.Var7]; %T.Var7] %T.Var6]; %T.Var6] %T.Var6 T.Var11] %T.Var6 T.Var9] %T.Var9 T.Var6];% T.Humidity];
 Yvar = [T.Var7];
-trainingcut = 5000 %floor(size(Yvar,1)*3/4);
+trainingcut = 10000 %floor(size(Yvar,1)*3/4);
 trainingX = gpuArray(Xvar(1:trainingcut,:));
 testingX = gpuArray(Xvar(trainingcut:end,:));
 trainingY = gpuArray(Yvar(1:trainingcut));
@@ -29,25 +29,24 @@ testingY = gpuArray(Yvar(trainingcut:end,:));
 jump = 1;
 interval =720;
 %numtraininc = floor(numel(trainingX)/timeinc);
-meanY = gpuArray([])
+
 coefarr = gpuArray([]);
 cd1p = gpuArray([]);%gpuArray(zeros(trainingcut-interval+1,num));
-pint = 1;
 
     [C3,L3] = wavedec(trainingX,lev,wname);
     [cd1,cd2,cd3,cd4,cd5] = detcoef(C3,L3,[1 2 3 4 5]);
-    cd3 = appcoef(C3,L3,wname,1);
+    a1 = appcoef(C3,L3,wname,1);
 for i = interval:jump:trainingcut/2
     coefarr = [coefarr;cd1(i-interval+1:i)'];
     meanY = [meanY;mean(trainingY(i+pint))'];
-    cd1p = [cd1p,cd3(i+pint)];
+    cd1p = [cd1p,a1(i+pint)];
 end
 
-% for i = interval:jump:numel(testingY)- pint
-%     coefarr = [coefarr;cd1(i-trainingcut/2+1:i)'];
-%     meanYt = [meanY;mean(trainingY(i+pint))'];
-%     cd1pt = [cd1p,a1(i+pint)];
-% end
+for for i = interval:jump:numel(testingY)- pint
+    coefarr = [coefarr;cd1(i-trainingcut/2+1:i)'];
+    meanYt = [meanY;mean(trainingY(i+pint))'];
+    cd1pt = [cd1p,a1(i+pint)];
+end
 
     %% reconstruct coefficient
 %end
@@ -59,5 +58,5 @@ end
     coefarr = gather(coefarr);
     meanY = gather(meanY);
     cd1p = gather(cd1p)
-    net = feedforwardnet(5, 'trainlm');
+    net = feedforwardnet(40, 'trainlm');
     net2 = train(net,coefarr',cd1p);
