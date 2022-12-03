@@ -12,35 +12,48 @@ timearr = cell2mat(T.Var1);
 time = datetime(timearr(:,1:19));
 T.Var1 = time;
 T = sortrows(T,1);
-wname = 'db2';
+wname = 'db6';
 lev = 5;
 %% train net
 len = 96448;
 [swa, swd] = swt(T.Var7(1:len),lev,wname);
 x = iswt(swa,swd,wname);
-traininginterval = 704 ;
+traininginterval = 137 ;
 jump = 1;
 coef = cell(1,2*lev )
+
+
 for level = 1:lev
     coef{level} = {reshape(swd(level,:),traininginterval,len/traininginterval)'} ;
     coef{lev + level} = {reshape(swa(level,:),traininginterval,len/traininginterval)'};
 end
 
-net = feedforwardnet(30,'trainlm');
-net.trainParam.max_fail  = 20
+
 trainednets = cell(1,level)
 for i =1:size(coef,2)
-    feature = cell2mat(coef{i});
-    trainednets{i} = train(net,feature(:,end-1)',feature(:,end)');
+    net = feedforwardnet(5,'trainlm');
+    net.trainParam.max_fail  = 20
+    feature = cell2mat(coef{i})';
+    %featuretransposed = feature'
+    trainednets{i} = train(net,feature(1:end-1,1:352),feature(end,1:352));
 end
 
 
 %% test net
-swdf
 % getcoef
+coeff = zeros(2*lev,len);
 for i =1:size(coef,2)
-    feature = cell2mat(coef{i});
+    feature = cell2mat(coef{i})';
     net2 = trainednets{i};
-    feature(:,end) = net2(feature(:,end-1)');
-    reshape(feature,1,96448);
+    feature(end,:) = net2(feature(1:end-1,:));
+    coeff(i,:) = reshape(feature,1,numel(feature));
 end
+
+signal = iswt(coeff(lev:2*lev,:),coeff(1:lev,:),wname);
+figure
+hold on
+prediction = signal(1:137:end)
+real = T.Var7(1:137:end)
+plot(prediction)
+plot(real)
+legend('prediction', 'real')
