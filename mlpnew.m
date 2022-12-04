@@ -13,29 +13,40 @@ time = datetime(timearr(:,1:19));
 T.Var1 = time;
 T = sortrows(T,1);
 wname = 'db6';
-lev = 5;
+lev = 3;
 %% train net
-len = 96448;
-[swa, swd] = swt(T.Var7(1:len),lev,wname);
-x = iswt(swa,swd,wname);
-traininginterval = 137 ;
+
+traininginterval = 144 ;
+len = 96480 - traininginterval;
 jump = 1;
 coef = cell(1,2*lev )
+swac = []
+swdc = []
+for i= 1:traininginterval:len
+    [swa, swd] = swt(T.Var7(i:i+traininginterval-1),lev,wname);
+    swac = [swac swa];
+    swdc = [swdc swd];
+end
+
+swdc
+%x = iswt(swa,swd,wname);
 
 
 for level = 1:lev
-    coef{level} = {reshape(swd(level,:),traininginterval,len/traininginterval)'} ;
-    coef{lev + level} = {reshape(swa(level,:),traininginterval,len/traininginterval)'};
+    coef{level} = {reshape(swdc(level,:),traininginterval,len/traininginterval)'} ;
+    coef{lev + level} = {reshape(swac(level,:),traininginterval,len/traininginterval)'};
 end
 
-
-trainednets = cell(1,level)
+%coef{1} = {reshape(T.Var7(1:len),traininginterval,len/traininginterval)'} 
+ 
+trainednets = cell(1,lev*2)
 for i =1:size(coef,2)
-    net = feedforwardnet(5,'trainlm');
-    net.trainParam.max_fail  = 20
+    net = feedforwardnet(30,'trainlm');
+    net.trainParam.max_fail  = 20;
+    net.trainParam.epochs  = 400;
     feature = cell2mat(coef{i})';
     %featuretransposed = feature'
-    trainednets{i} = train(net,feature(1:end-1,1:352),feature(end,1:352));
+    trainednets{i} = train(net,feature(1:end-1,1:500),feature(end,1:500));
 end
 
 
@@ -47,13 +58,18 @@ for i =1:size(coef,2)
     net2 = trainednets{i};
     feature(end,:) = net2(feature(1:end-1,:));
     coeff(i,:) = reshape(feature,1,numel(feature));
+    figure
+    hold on
+    %plot(coeff(i,traininginterval:))
+   
 end
 
-signal = iswt(coeff(lev:2*lev,:),coeff(1:lev,:),wname);
+signal = iswt(coeff(lev+1:2*lev,:),coeff(1:lev,:),wname);
 figure
 hold on
-prediction = signal(1:137:end)
-real = T.Var7(1:137:end)
-plot(prediction)
+prediction = signal(traininginterval:traininginterval:end)
+test = T.Var7(traininginterval:traininginterval:end)
+real = test(1:end)
+plot(prediction(1:end))
 plot(real)
 legend('prediction', 'real')
